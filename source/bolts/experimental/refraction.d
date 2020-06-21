@@ -16,7 +16,12 @@ import std.format;
 import std.meta;
 import std.algorithm.iteration : map;
 import std.range : iota;
-import std.traits;
+import std.traits : functionAttributes, FunctionAttribute;
+
+// Do not require caller module to import 'std.traits'. Instead use our own
+// aliases in mixtures.
+alias ReturnType = std.traits.ReturnType;
+alias Parameters = std.traits.Parameters;
 
 template ParameterAttribute(alias F, int i, int j) {
     static if (is(typeof(F) P == __parameters)) {
@@ -48,7 +53,7 @@ if (is(typeof(fun) == function)) {
     name: __traits(identifier, fun),
     index: -1,
     localName: localName,
-    returnType: "std.traits.ReturnType!("~localName~")",
+    returnType: "bolts.experimental.refraction.ReturnType!("~localName~")",
     parameters: refractParameterList!(fun, localName),
     udas: __traits(getAttributes, fun)
     .length.iota.map!(
@@ -67,13 +72,13 @@ unittest {
     alias F = answer; // typically F is a template argument
     static assert(
         refract!(F, "F").mixture ==
-        "pure @nogc @system std.traits.ReturnType!(F) answer(lazy std.traits.Parameters!(F)[0] _0);");
+        "pure @nogc @system bolts.experimental.refraction.ReturnType!(F) answer(lazy bolts.experimental.refraction.Parameters!(F)[0] _0);");
 }
 
 ///
 unittest {
     import std.format;
-    import std.traits;
+    import bolts.experimental.refraction;
 
     interface GrandTour {
         pure int foo() immutable;
@@ -146,13 +151,13 @@ unittest {
     enum answer0 = refract!(Container, "Container", "answer", 0);
     static assert(
         answer0.mixture ==
-        q{@system std.traits.ReturnType!(__traits(getOverloads, Container, "answer")[0]) answer();});
+        q{@system bolts.experimental.refraction.ReturnType!(__traits(getOverloads, Container, "answer")[0]) answer();});
     static assert(answer0.index == 0);
 
     enum answer1 = refract!(Container, "Container", "answer", 1);
     static assert(
         answer1.mixture ==
-        q{@system std.traits.ReturnType!(__traits(getOverloads, Container, "answer")[1]) answer();});
+        q{@system bolts.experimental.refraction.ReturnType!(__traits(getOverloads, Container, "answer")[1]) answer();});
     static assert(answer1.index == 1);
 }
 
@@ -210,12 +215,12 @@ unittest {
 
     static assert(
         functions[0].mixture ==
-        q{@system std.traits.ReturnType!(__traits(getOverloads, Container, "answer")[0]) answer();});
+        q{@system bolts.experimental.refraction.ReturnType!(__traits(getOverloads, Container, "answer")[0]) answer();});
     static assert(functions[0].index == 0);
 
     static assert(
         functions[1].mixture ==
-        q{@system std.traits.ReturnType!(__traits(getOverloads, Container, "answer")[2]) answer();});
+        q{@system bolts.experimental.refraction.ReturnType!(__traits(getOverloads, Container, "answer")[2]) answer();});
     static assert(functions[1].index == 2);
 }
 
@@ -313,7 +318,7 @@ immutable struct Function {
     }
 
     /**
-       Return type. Initial value: `std.traits.ReturnType!fun`.
+       Return type. Initial value: `bolts.experimental.refraction.ReturnType!fun`.
     */
 
     string returnType;
@@ -691,7 +696,7 @@ private Parameter refractParameter(alias Fun, string mixture, uint index)() {
         }
 
         Parameter p = {
-            type: `std.traits.Parameters!(%s)[%d]`.format(mixture, index),
+            type: `bolts.experimental.refraction.Parameters!(%s)[%d]`.format(mixture, index),
             name: "_%d".format(index),
             storageClasses: [__traits(getParameterStorageClasses, Fun, index)],
             udas: udas,
