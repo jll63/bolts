@@ -1,12 +1,14 @@
 /++
- It is sometimes necessary to create a function which is an exact copy of
- another function. Or sometimes it is necessary to introduce a few
- variations, while carrying all the other aspects. Because of function
- attributes, parameter storage classes and user-defined attributes, this
- requires building a string mixin. In addition, the mixed-in code must refer
- only to local names, if it is to work across module boundaires.
+This module helps building functions from other functions.
 
- This module facilitates the creation of such mixins.
+ It is sometimes necessary to create a function which is an exact copy of
+ another function. Or sometimes it is necessary to introduce a few variations,
+ while carrying all the other aspects. Because of function attributes,
+ parameter storage classes and user-defined attributes, this requires building
+ a string mixin. In addition, the mixed-in code must refer only to local names,
+ if it is to work across module boundaires. This module facilitates the
+ creation of such mixins.
+
  +/
 
 module bolts.experimental.refraction;
@@ -37,14 +39,13 @@ unittest {
 }
 
 /**
-   Return a Function object that captures all the aspects of `fun`, using the
+   Return a `Function` object that captures all the aspects of `fun`, using the
    value of `localName` to represent the return and parameter types, and the
    UDAs.
 
    Params:
    fun = a function
-   localName = a string mixin that represents fun in the caller's context
-
+   localName = a string that represents `fun` in the caller's context
 */
 
 Function refract(alias fun, string localName)()
@@ -78,6 +79,7 @@ unittest {
 ///
 unittest {
     import std.format;
+    import std.traits : FunctionAttribute;
     import bolts.experimental.refraction;
 
     interface GrandTour {
@@ -120,9 +122,9 @@ private enum isFunctionContainer(alias T) = is(T == module) || is(T == struct)
     || is(T == class) || is(T == interface) || is(T == union);
 
 /**
-   Return a Function object refracting the function overload identified by
+   Return a `Function` object refracting the function overload identified by
    `name` and `index` in `Scope`, using the value of `localName` to represent
-   the `Scope`. Store `index` in the `index` property of the Function.
+   `Scope`. Store `index` in the `index` property of the Function.
 
    Params:
    Scope = a struct, class, interface, or union
@@ -141,7 +143,7 @@ if (isFunctionContainer!Scope) {
 
 ///
 unittest {
-    struct Answers {
+    interface Answers {
         int answer();
         string answer();
     }
@@ -165,11 +167,11 @@ private enum True(T...) = true;
 
 /**
    Return an array of `Function` objects, refracting the functions in `Scope`
-   for which `Predicate` evaluates to `true`, using the value of `localName`
-   to represent the `Scope`. `Predicate` is optional; if not specified, refract
-   all the functions. The `index` property of each `Function` is set to the
-   index of the function in its *entire* overload set (i.e. including the
-   overloads that may have been excluded by `Predicate`).
+   for which `Predicate` evaluates to `true`, using the value of `localName` to
+   represent `Scope`. `Predicate` is optional; if not specified, refract all
+   the functions. The `index` property of each `Function` is set to the index
+   of the function in its *entire* overload set (i.e. including the overloads
+   that may have been excluded by `Predicate`).
 
    Applying this function to a module, without specifying `Predicate`, may
    severely affect compilation time, as *all* the properties of *all* functions
@@ -179,7 +181,6 @@ private enum True(T...) = true;
    Scope = a struct, class, interface, or union
    localName = a string mixin that represents `Scope`
    Predicate = a template that takes an alias to a function and evaluates to a compile time boolean
-   index = the index of the function in the set of overloaded function called `name`
 */
 
 auto refract(alias Scope, string localName, alias Predicate = True)()
@@ -199,7 +200,7 @@ if (isFunctionContainer!Scope) {
 
 ///
 unittest {
-    static struct Answers {
+    static union Answers {
         int answer();
         void answer();
         string answer();
@@ -262,7 +263,8 @@ unittest {
 }
 
 /**
-   A struct capturing all the properties of a function.
+   A struct capturing all the aspects of a function necessary to produce a
+   string mixin that re-creates the function (excepting the body).
 */
 
 immutable struct Function {
@@ -312,7 +314,7 @@ immutable struct Function {
        `value`.
     */
 
-    Function withIndex(uint value) {
+    Function withIndex(int value) {
         mixin replaceAttribute!"index";
         return copy;
     }
@@ -337,7 +339,8 @@ immutable struct Function {
     unittest {
         pure int answer() { return 42; }
         mixin(
-            refract!(answer, "answer").withName("realAnswer")
+            refract!(answer, "answer")
+            .withName("realAnswer")
             .withReturnType("real")
             .mixture);
         static assert(is(typeof(realAnswer()) == real));
@@ -364,7 +367,8 @@ immutable struct Function {
     unittest {
         int answer();
         mixin(
-            refract!(answer, "answer").withName("answerQuestion")
+            refract!(answer, "answer")
+            .withName("answerQuestion")
             .withParameters([ Parameter().withName("question").withType("string")])
             .mixture);
         int control(string);
@@ -372,15 +376,14 @@ immutable struct Function {
     }
 
     /**
-       Return a new `Function` object with a parameter attribute containing the
-       same parameters, with new `inserted` parameters at the specified
-       `index`.
+       Return a new `Function` object with `newParameters` inserted at the
+       specified `index` in the `attributes`.
     */
 
-    Function insertParameters(uint index, immutable(Parameter)[] inserted...) {
-        auto value = index == parameters.length ? parameters ~ inserted
-            : index == 0 ? inserted ~ parameters
-            : parameters[0..index] ~ inserted ~ parameters[index..$];
+    Function insertParameters(uint index, immutable(Parameter)[] newParameters...) {
+        auto value = index == parameters.length ? parameters ~ newParameters
+            : index == 0 ? newParameters ~ parameters
+            : parameters[0..index] ~ newParameters ~ parameters[index..$];
         mixin replaceAttribute!"parameters";
         return copy;
     }
@@ -445,7 +448,8 @@ immutable struct Function {
 
     /**
        If `true`, prefix generated function with `static`. Initial value:
-       `true` if the refracted function is a static *member* function.
+       `true` if the refracted function is a static *member* function inside a
+       struct, class, interface, or union.
     */
 
     bool static_;
@@ -505,8 +509,7 @@ immutable struct Function {
     }
 
     /**
-       Return a string representing the entire function definition or
-       declaration.
+       Return mixin code for this `Function`.
     */
 
     string mixture() {
