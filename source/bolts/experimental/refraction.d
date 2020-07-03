@@ -6,8 +6,11 @@ This module helps building functions from other functions.
  while carrying all the other aspects. Because of function attributes,
  parameter storage classes and user-defined attributes, this requires building
  a string mixin. In addition, the mixed-in code must refer only to local names,
- if it is to work across module boundaires. This module facilitates the
- creation of such mixins.
+ if it is to work across module boundaires. This problem and its solution are
+ by Adam D. Ruppe in a Tip of the Week, available here:
+ https://stackoverflow.com/questions/32615733/struct-composition-with-mixin-and-templates/32621854#32621854
+
+ This module facilitates the  creation of such mixins.
 
  +/
 
@@ -42,6 +45,13 @@ unittest {
    Return a `Function` object that captures all the aspects of `fun`, using the
    value of `localName` to represent the return and parameter types, and the
    UDAs.
+
+   The `localName` parameter is, in general, *not* the function name. Rather,
+   it is a compile-time expression that involves only symbols that exist in the
+   caller's scope, for example a function alias passed as a template
+   parameter. See
+   https://stackoverflow.com/questions/32615733/struct-composition-with-mixin-and-templates/32621854#32621854
+   for a detailed explanation.
 
    Params:
    fun = a function
@@ -167,29 +177,29 @@ private enum True(T...) = true;
 
 /**
    Return an array of `Function` objects, refracting the functions in `Scope`
-   for which `Predicate` evaluates to `true`, using the value of `localName` to
-   represent `Scope`. `Predicate` is optional; if not specified, refract all
+   for which `IncludePredicate` evaluates to `true`, using the value of `localName` to
+   represent `Scope`. `IncludePredicate` is optional; if not specified, refract all
    the functions. The `index` property of each `Function` is set to the index
    of the function in its *entire* overload set (i.e. including the overloads
-   that may have been excluded by `Predicate`).
+   that may have been excluded by `IncludePredicate`).
 
-   Applying this function to a module, without specifying `Predicate`, may
+   Applying this function to a module, without specifying `IncludePredicate`, may
    severely affect compilation time, as *all* the properties of *all* functions
    in the module will be queried.
 
    Params:
-   Scope = a struct, class, interface, or union
+   Scope = an aggregate or a module
    localName = a string mixin that represents `Scope`
-   Predicate = a template that takes an alias to a function and evaluates to a compile time boolean
+   IncludePredicate = a template that takes an alias to a function and evaluates to a compile time boolean
 */
 
-auto refract(alias Scope, string localName, alias Predicate = True)()
+auto refract(alias Scope, string localName, alias IncludePredicate = True)()
 if (isFunctionContainer!Scope) {
     Function[] functions;
 
     static foreach (member; __traits(allMembers, Scope)) {
         static foreach (index, fun; __traits(getOverloads, Scope, member)) {
-            static if (Predicate!fun) {
+            static if (IncludePredicate!fun) {
                 functions ~= refract!(Scope, localName, member, index);
             }
         }

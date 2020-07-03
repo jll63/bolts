@@ -100,8 +100,8 @@ but retains the 'pure' attribute from the original function:
 ```d
 pure int answer() { return 42; }
 mixin(
-  refract!(answer, "answer").setName("realAnswer")
-  .setReturnType("real")
+  refract!(answer, "answer").withName("realAnswer")
+  .withReturnType("real")
   .mixture);
 static assert(is(typeof(realAnswer()) == real));
 static assert(functionAttributes!realAnswer & FunctionAttribute.pure_);

@@ -80,8 +80,8 @@
     ---
     pure int answer() { return 42; }
     mixin(
-      refract!(answer, "answer").setName("realAnswer")
-      .setReturnType("real")
+      refract!(answer, "answer").withName("realAnswer")
+      .withReturnType("real")
       .mixture);
     static assert(is(typeof(realAnswer()) == real));
     static assert(functionAttributes!realAnswer & FunctionAttribute.pure_);
