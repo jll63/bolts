@@ -44,7 +44,8 @@ unittest {
 /**
    Return a `Function` object that captures all the aspects of `fun`, using the
    value of `localName` to represent the return and parameter types, and the
-   UDAs.
+   UDAs. Set the `Function`'s `index` property to `index`, or to -1 if it is
+   not specified.
 
    The `localName` parameter is, in general, *not* the function name. Rather,
    it is a compile-time expression that involves only symbols that exist in the
@@ -58,11 +59,11 @@ unittest {
    localName = a string that represents `fun` in the caller's context
 */
 
-Function refract(alias fun, string localName)()
+Function refract(alias fun, string localName, int index = -1)()
 if (is(typeof(fun) == function)) {
     Function model = {
     name: __traits(identifier, fun),
-    index: -1,
+    index: index,
     localName: localName,
     returnType: "bolts.experimental.refraction.ReturnType!("~localName~")",
     parameters: refractParameterList!(fun, localName),
@@ -128,51 +129,6 @@ unittest {
     assert(l == 0);
 }
 
-private enum isFunctionContainer(alias T) = is(T == module) || is(T == struct)
-    || is(T == class) || is(T == interface) || is(T == union);
-
-/**
-   Return a `Function` object refracting the function overload identified by
-   `name` and `index` in `Scope`, using the value of `localName` to represent
-   `Scope`. Store `index` in the `index` property of the Function.
-
-   Params:
-   Scope = a struct, class, interface, or union
-   localName = a string mixin that represents `Scope`
-   name = the name of the function
-   index = the index of the function in the set of overloaded function called `name`
-*/
-
-Function refract(alias Scope, string localName, string name, uint index)()
-if (isFunctionContainer!Scope) {
-    return refract!(
-        __traits(getOverloads, Scope, name)[index],
-        `__traits(getOverloads, %s, "%s")[%d]`.format(localName, name, index))
-        .withIndex(index);
-}
-
-///
-unittest {
-    interface Answers {
-        int answer();
-        string answer();
-    }
-
-    alias Container = Answers;
-
-    enum answer0 = refract!(Container, "Container", "answer", 0);
-    static assert(
-        answer0.mixture ==
-        q{@system bolts.experimental.refraction.ReturnType!(__traits(getOverloads, Container, "answer")[0]) answer();});
-    static assert(answer0.index == 0);
-
-    enum answer1 = refract!(Container, "Container", "answer", 1);
-    static assert(
-        answer1.mixture ==
-        q{@system bolts.experimental.refraction.ReturnType!(__traits(getOverloads, Container, "answer")[1]) answer();});
-    static assert(answer1.index == 1);
-}
-
 private enum True(T...) = true;
 
 /**
@@ -193,14 +149,19 @@ private enum True(T...) = true;
    IncludePredicate = a template that takes an alias to a function and evaluates to a compile time boolean
 */
 
-auto refract(alias Scope, string localName, alias IncludePredicate = True)()
-if (isFunctionContainer!Scope) {
+auto functionsOf(alias Scope, string localName, alias IncludePredicate = True)()
+if (is(Scope == module) || is(Scope == struct)
+    || is(Scope == class) || is(Scope == interface) || is(Scope == union)) {
     Function[] functions;
 
     static foreach (member; __traits(allMembers, Scope)) {
         static foreach (index, fun; __traits(getOverloads, Scope, member)) {
             static if (IncludePredicate!fun) {
-                functions ~= refract!(Scope, localName, member, index);
+                functions ~= refract!(
+                    __traits(getOverloads, Scope, member)[index],
+                    `__traits(getOverloads, %s, "%s")[%d]`.format(
+                        localName, member, index),
+                    index);
             }
         }
     }
@@ -220,7 +181,7 @@ unittest {
 
     enum NotVoid(alias F) = !is(ReturnType!(F) == void);
 
-    enum functions = refract!(Container, "Container", NotVoid);
+    enum functions = functionsOf!(Container, "Container", NotVoid);
 
     static assert(functions.length == 2);
 
@@ -320,16 +281,6 @@ immutable struct Function {
     int index;
 
     /**
-       Return a new `Function` object with the `index` attribute set to
-       `value`.
-    */
-
-    Function withIndex(int value) {
-        mixin replaceAttribute!"index";
-        return copy;
-    }
-
-    /**
        Return type. Initial value: `bolts.experimental.refraction.ReturnType!fun`.
     */
 
@@ -390,7 +341,7 @@ immutable struct Function {
        specified `index` in the `attributes`.
     */
 
-    Function insertParameters(uint index, immutable(Parameter)[] newParameters...) {
+    Function withParametersAt(uint index, immutable(Parameter)[] newParameters...) {
         auto value = index == parameters.length ? parameters ~ newParameters
             : index == 0 ? newParameters ~ parameters
             : parameters[0..index] ~ newParameters ~ parameters[index..$];
