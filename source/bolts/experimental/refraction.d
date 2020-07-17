@@ -53,7 +53,7 @@ if (is(typeof(fun) == function)) {
     name: __traits(identifier, fun),
     overloadIndex: overloadIndex,
     localName: localName,
-    returnType: "bolts.experimental.refraction.ReturnType!("~localName~")",
+    returnType: __MODULE__~".ReturnType!("~localName~")",
     parameters: refractParameterList!(fun, localName),
     udas: __traits(getAttributes, fun)
     .length.iota.map!(
@@ -72,7 +72,8 @@ unittest {
     alias F = answer; // typically F is a template argument
     static assert(
         refract!(F, "F").mixture ==
-        "pure @nogc @system bolts.experimental.refraction.ReturnType!(F) answer(lazy bolts.experimental.refraction.Parameters!(F)[0] _0);");
+        "pure @nogc @system %s.ReturnType!(F) answer(lazy %s.Parameters!(F)[0] _0);"
+        .format(__MODULE__, __MODULE__));
 }
 
 ///
@@ -176,12 +177,12 @@ unittest {
 
     static assert(
         functions[0].mixture ==
-        q{@system bolts.experimental.refraction.ReturnType!(__traits(getOverloads, Container, "answer")[0]) answer();});
+        q{@system %s.ReturnType!(__traits(getOverloads, Container, "answer")[0]) answer();}.format(__MODULE__));
     static assert(functions[0].overloadIndex == 0);
 
     static assert(
         functions[1].mixture ==
-        q{@system bolts.experimental.refraction.ReturnType!(__traits(getOverloads, Container, "answer")[2]) answer();});
+        q{@system %s.ReturnType!(__traits(getOverloads, Container, "answer")[2]) answer();}.format(__MODULE__));
     static assert(functions[1].overloadIndex == 2);
 }
 
@@ -638,8 +639,8 @@ private Parameter refractParameter(alias Fun, string mixture, uint index)() {
     static if (is(typeof(Fun) parameters == __parameters)) {
         alias parameter = parameters[index .. index + 1];
         static if (__traits(compiles,  __traits(getAttributes, parameter))) {
-            enum udaFormat = "@(bolts.experimental.refraction.ParameterAttribute!(%s, %d, %%d))".format(
-                mixture, index);
+            enum udaFormat = "@(%s.ParameterAttribute!(%s, %d, %%d))".format(
+                __MODULE__, mixture, index);
             enum udas = __traits(getAttributes, parameter).length.iota.map!(
                 formatIndex!udaFormat).array;
         } else {
@@ -647,7 +648,7 @@ private Parameter refractParameter(alias Fun, string mixture, uint index)() {
         }
 
         Parameter p = {
-            type: `bolts.experimental.refraction.Parameters!(%s)[%d]`.format(mixture, index),
+        type: `%s.Parameters!(%s)[%d]`.format(__MODULE__, mixture, index),
             name: "_%d".format(index),
             storageClasses: [__traits(getParameterStorageClasses, Fun, index)],
             udas: udas,
@@ -682,7 +683,8 @@ private string formatIndex(string f)(ulong i) {
 
 template ParameterAttribute(alias fun, int i, int j) {
     static if (is(typeof(fun) P == __parameters)) {
-        alias ParameterAttribute = Alias!(__traits(getAttributes, P[i..i+1])[j]);
+        alias ParameterAttribute =
+            Alias!(__traits(getAttributes, P[i..i+1])[j]);
     }
 }
 
