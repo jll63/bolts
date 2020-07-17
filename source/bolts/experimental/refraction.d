@@ -16,10 +16,10 @@ This module helps building functions from other functions.
 
 module bolts.experimental.refraction;
 
+import std.algorithm.iteration : map;
 import std.array;
 import std.format;
 import std.meta;
-import std.algorithm.iteration : map;
 import std.range : iota;
 import std.traits : functionAttributes, FunctionAttribute;
 
@@ -57,9 +57,11 @@ if (is(typeof(fun) == function)) {
     parameters: refractParameterList!(fun, localName),
     udas: __traits(getAttributes, fun)
     .length.iota.map!(
-        formatIndex!("@(__traits(getAttributes, %s)[%%d])".format(localName))).array,
+        formatIndex!(
+            "@(__traits(getAttributes, %s)[%%d])".format(localName))).array,
     attributes: functionAttributes!(fun),
-    static_: __traits(isStaticFunction, fun) && isAggregate!(__traits(parent, fun)),
+    static_: (__traits(isStaticFunction, fun)
+              && isAggregate!(__traits(parent, fun))),
     body_: ";",
     };
 
@@ -84,7 +86,8 @@ unittest {
 
     interface GrandTour {
         pure int foo() immutable;
-        @nogc @trusted nothrow ref int foo(out real, return ref int, lazy int) const;
+        @nogc @trusted nothrow ref int foo(
+            out real, return ref int, lazy int) const;
         @safe shared scope void bar(scope Object);
     }
 
@@ -129,23 +132,26 @@ private enum True(T...) = true;
    (i.e. including the overloads that may have been excluded by
    `IncludePredicate`).
 
-   Applying this function to a module, without specifying `IncludePredicate`, may
-   severely affect compilation time, as *all* the properties of *all* functions
-   in the module will be queried.
+   Applying this function to a module, without specifying `IncludePredicate`,
+   may severely affect compilation time, as *all* the properties of *all*
+   functions in the module will be queried.
 
    Params:
    Scope = an aggregate or a module
    localName = a string mixin that represents `Scope`
-   IncludePredicate = a template that takes an alias to a function and evaluates to a compile time boolean
+   IncludePredicate = a template that takes an alias to a function and
+                      evaluates to a compile time boolean
 */
 
-auto functionsOf(alias Scope, string localName, alias IncludePredicate = True)()
+auto functionsOf(
+    alias Scope, string localName, alias IncludePredicate = True)()
 if (is(Scope == module) || is(Scope == struct)
     || is(Scope == class) || is(Scope == interface) || is(Scope == union)) {
     Function[] functions;
 
     static foreach (member; __traits(allMembers, Scope)) {
-        static foreach (overloadIndex, fun; __traits(getOverloads, Scope, member)) {
+        static foreach (
+            overloadIndex, fun; __traits(getOverloads, Scope, member)) {
             static if (IncludePredicate!fun) {
                 functions ~= refract!(
                     __traits(getOverloads, Scope, member)[overloadIndex],
@@ -177,12 +183,14 @@ unittest {
 
     static assert(
         functions[0].mixture ==
-        q{@system %s.ReturnType!(__traits(getOverloads, Container, "answer")[0]) answer();}.format(__MODULE__));
+        q{@system %s.ReturnType!(__traits(getOverloads, Container, "answer")[0]) answer();}
+        .format(__MODULE__));
     static assert(functions[0].overloadIndex == 0);
 
     static assert(
         functions[1].mixture ==
-        q{@system %s.ReturnType!(__traits(getOverloads, Container, "answer")[2]) answer();}.format(__MODULE__));
+        q{@system %s.ReturnType!(__traits(getOverloads, Container, "answer")[2]) answer();}
+        .format(__MODULE__));
     static assert(functions[1].overloadIndex == 2);
 }
 
@@ -198,7 +206,8 @@ private mixin template replaceAttribute(string Name) {
             string[] mixture;
             foreach (member; __traits(allMembers, Struct)) {
                 if (__traits(getOverloads, Struct, member).length == 0) {
-                    mixture ~= member ~ ":" ~ (member == Name ? "value" : member);
+                    mixture ~= member ~ ":"
+                        ~ (member == Name ? "value" : member);
                 }
             }
             return mixture.join(",\n");
@@ -269,7 +278,8 @@ immutable struct Function {
     int overloadIndex;
 
     /**
-       Return type. Initial value: `bolts.experimental.refraction.ReturnType!fun`.
+       Return type. Initial value:
+       `bolts.experimental.refraction.ReturnType!fun`.
     */
 
     string returnType;
@@ -318,7 +328,8 @@ immutable struct Function {
         mixin(
             refract!(answer, "answer")
             .withName("answerQuestion")
-            .withParameters([ Parameter().withName("question").withType("string")])
+            .withParameters(
+                [ Parameter().withName("question").withType("string")])
             .mixture);
         int control(string);
         static assert(is(Parameters!answerQuestion == Parameters!control));
@@ -329,7 +340,8 @@ immutable struct Function {
        specified `index` in the `attributes`.
     */
 
-    Function withParametersAt(uint index, immutable(Parameter)[] newParameters...) {
+    Function withParametersAt(
+        uint index, immutable(Parameter)[] newParameters...) {
         auto value = index == parameters.length ? parameters ~ newParameters
             : index == 0 ? newParameters ~ parameters
             : parameters[0..index] ~ newParameters ~ parameters[index..$];
@@ -487,7 +499,8 @@ immutable struct Function {
     ///
     unittest {
         int add(int a, int b);
-        static assert(refract!(add, "add").argumentMixtureArray == [ "_0", "_1" ]);
+        static assert(
+            refract!(add, "add").argumentMixtureArray == [ "_0", "_1" ]);
     }
 
     /**
