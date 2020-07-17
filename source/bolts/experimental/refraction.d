@@ -28,24 +28,11 @@ import std.traits : functionAttributes, FunctionAttribute;
 alias ReturnType = std.traits.ReturnType;
 alias Parameters = std.traits.Parameters;
 
-template ParameterAttribute(alias F, int i, int j) {
-    static if (is(typeof(F) P == __parameters)) {
-        alias ParameterAttribute = Alias!(__traits(getAttributes, P[i..i+1])[j]);
-    }
-}
-
-unittest {
-    struct virtual;
-    void kick(int times, @virtual @("Animal") Object animal);
-    static assert(is(ParameterAttribute!(kick, 1, 0) == virtual));
-    static assert(ParameterAttribute!(kick, 1, 1) == "Animal");
-}
-
 /**
    Return a `Function` object that captures all the aspects of `fun`, using the
    value of `localName` to represent the return and parameter types, and the
-   UDAs. Set the `Function`'s `index` property to `index`, or to -1 if it is
-   not specified.
+   UDAs. Set the `Function`'s `overloadIndex` property to `index`, or to -1 if
+   it is not specified.
 
    The `localName` parameter is, in general, *not* the function name. Rather,
    it is a compile-time expression that involves only symbols that exist in the
@@ -57,13 +44,14 @@ unittest {
    Params:
    fun = a function
    localName = a string that represents `fun` in the caller's context
+   overloadIndex = index of `fun` in its overload set, or -1
 */
 
-Function refract(alias fun, string localName, int index = -1)()
+Function refract(alias fun, string localName, int overloadIndex = -1)()
 if (is(typeof(fun) == function)) {
     Function model = {
     name: __traits(identifier, fun),
-    index: index,
+    overloadIndex: overloadIndex,
     localName: localName,
     returnType: "bolts.experimental.refraction.ReturnType!("~localName~")",
     parameters: refractParameterList!(fun, localName),
@@ -133,11 +121,12 @@ private enum True(T...) = true;
 
 /**
    Return an array of `Function` objects, refracting the functions in `Scope`
-   for which `IncludePredicate` evaluates to `true`, using the value of `localName` to
-   represent `Scope`. `IncludePredicate` is optional; if not specified, refract all
-   the functions. The `index` property of each `Function` is set to the index
-   of the function in its *entire* overload set (i.e. including the overloads
-   that may have been excluded by `IncludePredicate`).
+   for which `IncludePredicate` evaluates to `true`, using the value of
+   `localName` to represent `Scope`. `IncludePredicate` is optional; if not
+   specified, refract all the functions. The `overloadIndex` property of each
+   `Function` is set to the index of the function in its *entire* overload set
+   (i.e. including the overloads that may have been excluded by
+   `IncludePredicate`).
 
    Applying this function to a module, without specifying `IncludePredicate`, may
    severely affect compilation time, as *all* the properties of *all* functions
@@ -155,13 +144,13 @@ if (is(Scope == module) || is(Scope == struct)
     Function[] functions;
 
     static foreach (member; __traits(allMembers, Scope)) {
-        static foreach (index, fun; __traits(getOverloads, Scope, member)) {
+        static foreach (overloadIndex, fun; __traits(getOverloads, Scope, member)) {
             static if (IncludePredicate!fun) {
                 functions ~= refract!(
-                    __traits(getOverloads, Scope, member)[index],
+                    __traits(getOverloads, Scope, member)[overloadIndex],
                     `__traits(getOverloads, %s, "%s")[%d]`.format(
-                        localName, member, index),
-                    index);
+                        localName, member, overloadIndex),
+                    overloadIndex);
             }
         }
     }
@@ -188,12 +177,12 @@ unittest {
     static assert(
         functions[0].mixture ==
         q{@system bolts.experimental.refraction.ReturnType!(__traits(getOverloads, Container, "answer")[0]) answer();});
-    static assert(functions[0].index == 0);
+    static assert(functions[0].overloadIndex == 0);
 
     static assert(
         functions[1].mixture ==
         q{@system bolts.experimental.refraction.ReturnType!(__traits(getOverloads, Container, "answer")[2]) answer();});
-    static assert(functions[1].index == 2);
+    static assert(functions[1].overloadIndex == 2);
 }
 
 private enum isAggregate(T...) =
@@ -272,13 +261,11 @@ immutable struct Function {
     }
 
     /**
-       Index of function in an arbitrary collection of functions. The index can
-       be set explicitly with `withIndex`. The `refract` overloads that operate
-       on function containers set `index` to the position of the function in
-       the set of overloaded functions in a scope. Default value: -1.
+       Index of function in its overload set, if created by `functionsOf`, or
+       -1.
     */
 
-    int index;
+    int overloadIndex;
 
     /**
        Return type. Initial value: `bolts.experimental.refraction.ReturnType!fun`.
@@ -681,4 +668,27 @@ private Parameter[] refractParameterList(alias Fun, string mixture)() {
 
 private string formatIndex(string f)(ulong i) {
     return format!f(i);
+}
+
+/**
+   Return an alias to the `j`-th user-define attribute of the `i`-th parameter
+   of `fun`.
+
+   Params:
+   fun = a function
+   i = zero-based index of a parameter of fun
+   j = zero-based index of a user-defined attribute of i-th parameter fun
+*/
+
+template ParameterAttribute(alias fun, int i, int j) {
+    static if (is(typeof(fun) P == __parameters)) {
+        alias ParameterAttribute = Alias!(__traits(getAttributes, P[i..i+1])[j]);
+    }
+}
+
+unittest {
+    struct virtual;
+    void kick(int times, @virtual @("Animal") Object animal);
+    static assert(is(ParameterAttribute!(kick, 1, 0) == virtual));
+    static assert(ParameterAttribute!(kick, 1, 1) == "Animal");
 }
